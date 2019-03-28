@@ -52,6 +52,10 @@ group :tinytds do
 end
 # rubocop:enable Bundler/DuplicatedGem
 
+group :odbc do
+  gem 'ruby-odbc', :git => 'https://github.com/cloudvolumes/ruby-odbc.git', :tag => '0.101.cv'
+end
+
 group :development do
   gem "minitest-spec-rails"
   gem "mocha"

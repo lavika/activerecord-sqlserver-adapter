@@ -9,11 +9,15 @@ module ActiveRecord
       case mode
       when :dblib
         require "tiny_tds"
+      when :odbc
+        raise ArgumentError, "Missing :dsn configuration." unless config.key?(:dsn)
+        require "odbc"
+        require "active_record/connection_adapters/sqlserver/core_ext/odbc"
       else
         raise ArgumentError, "Unknown connection mode in #{config.inspect}."
       end
       ConnectionAdapters::SQLServerAdapter.new(nil, nil, config.merge(mode: mode))
-    rescue TinyTds::Error => e
+    rescue ODBC::Error => e
       if e.message.match(/database .* does not exist/i)
         raise ActiveRecord::NoDatabaseError
       else
