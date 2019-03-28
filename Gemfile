@@ -50,6 +50,10 @@ group :tinytds do
   end
 end
 
+group :odbc do
+  gem 'ruby-odbc', :git => 'https://github.com/cloudvolumes/ruby-odbc.git', :tag => '0.101.cv'
+end
+
 group :development do
   gem 'byebug'
   gem 'mocha'
