@@ -25,8 +25,8 @@ class SchemaDumperTestSQLServer < ActiveRecord::TestCase
     assert_line :float,             type: "float",                                                      default: 123.00000001
     assert_line :real,              type: "real",                                                       default: 123.45
     # Date and Time
-    assert_line :date,              type: "date",                                                       default: "01-01-0001"
-    assert_line :datetime,          type: "datetime",                    precision: nil,                default: "01-01-1753 00:00:00.123"
+    assert_line :date,              type: "date",         limit: nil,           precision: nil,   scale: nil,  default: "01-01-1900"
+    assert_line :datetime,          type: "datetime",     limit: nil,           precision: nil,   scale: nil,  default: "01-01-1753 00:00:00.123"
     if connection_dblib_73?
       assert_line :datetime2_7,     type: "datetime",                    precision: 7,                  default: "12-31-9999 23:59:59.9999999"
       assert_line :datetime2_3,     type: "datetime",                    precision: 3
