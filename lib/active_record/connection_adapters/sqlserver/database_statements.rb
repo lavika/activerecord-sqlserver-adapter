@@ -31,10 +31,6 @@ module ActiveRecord
           super.rows.first.try(:first) || super("SELECT @@ROWCOUNT As AffectedRows", "", []).rows.first.try(:first)
         end
 
-        def supports_statement_cache?
-          true
-        end
-
         def begin_db_transaction
           do_execute 'BEGIN TRANSACTION'
         end
@@ -75,9 +71,32 @@ module ActiveRecord
 
         def case_sensitive_comparison(table, attribute, column, value)
           if column.collation && !column.case_sensitive?
-            table[attribute].eq(Arel::Nodes::Bin.new(Arel::Nodes::BindParam.new))
+            table[attribute].eq(Arel::Nodes::Bin.new(value))
           else
             super
+          end
+        end
+
+        # We should propose this change to Rails team
+        def insert_fixtures_set(fixture_set, tables_to_delete = [])
+          fixture_inserts = []
+
+          fixture_set.each do |table_name, fixtures|
+            fixtures.each_slice(insert_rows_length) do |batch|
+              fixture_inserts << build_fixture_sql(batch, table_name)
+            end
+          end
+
+          table_deletes = tables_to_delete.map { |table| "DELETE FROM #{quote_table_name table}".dup }
+          total_sql = Array.wrap(combine_multi_statements(table_deletes + fixture_inserts))
+
+          disable_referential_integrity do
+            transaction(requires_new: true) do
+              total_sql.each do |sql|
+                execute sql, "Fixtures Load"
+                yield if block_given?
+              end
+            end
           end
         end
 
@@ -85,6 +104,21 @@ module ActiveRecord
           column.type == :string && (!column.collation || column.case_sensitive?)
         end
         private :can_perform_case_insensitive_comparison_for?
+
+        def combine_multi_statements(total_sql)
+          total_sql
+        end
+        private :combine_multi_statements
+
+        def default_insert_value(column)
+          if column.is_identity?
+            table_name = quote(quote_table_name(column.table_name))
+            Arel.sql("IDENT_CURRENT(#{table_name}) + IDENT_INCR(#{table_name})")
+          else
+            super
+          end
+        end
+        private :default_insert_value
 
         # === SQLServer Specific ======================================== #
 
@@ -204,6 +238,7 @@ module ActiveRecord
           end
           sql = if pk && use_output_inserted? && !database_prefix_remote_server?
                   quoted_pk = SQLServer::Utils.extract_identifiers(pk).quoted
+                  table_name ||= get_table_name(sql)
                   exclude_output_inserted = exclude_output_inserted_table_name?(table_name, sql)
                   if exclude_output_inserted
                     id_sql_type = exclude_output_inserted.is_a?(TrueClass) ? 'bigint' : exclude_output_inserted
@@ -255,6 +290,8 @@ module ActiveRecord
         def sp_executesql_types_and_parameters(binds)
           types, params = [], []
           binds.each_with_index do |attr, index|
+            attr = attr.value if attr.is_a?(Arel::Nodes::BindParam)
+
             types << "@#{index} #{sp_executesql_sql_type(attr)}"
             params << sp_executesql_sql_param(attr)
           end
@@ -272,12 +309,12 @@ module ActiveRecord
         end
 
         def sp_executesql_sql_param(attr)
-          case attr.value_for_database
+          case value = attr.value_for_database
           when Type::Binary::Data,
                ActiveRecord::Type::SQLServer::Data
-            quote(attr.value_for_database)
+            quote(value)
           else
-            quote(type_cast(attr.value_for_database))
+            quote(type_cast(value))
           end
         end
 
@@ -325,7 +362,7 @@ module ActiveRecord
         end
 
         def exec_insert_requires_identity?(sql, pk, binds)
-          query_requires_identity_insert?(sql) if pk && binds.map(&:name).include?(pk)
+          query_requires_identity_insert?(sql)
         end
 
         def query_requires_identity_insert?(sql)

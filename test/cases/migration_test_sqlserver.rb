@@ -20,7 +20,7 @@ class MigrationTestSQLServer < ActiveRecord::TestCase
     it 'not create a tables if error in migrations' do
       begin
         migrations_dir = File.join ARTest::SQLServer.migrations_root, 'transaction_table'
-        quietly { ActiveRecord::Migrator.up(migrations_dir) }
+        quietly { ActiveRecord::MigrationContext.new(migrations_dir).up }
       rescue Exception => e
         assert_match %r|this and all later migrations canceled|, e.message
       end
@@ -41,6 +41,8 @@ class MigrationTestSQLServer < ActiveRecord::TestCase
       lock_version_column = Person.columns_hash['lock_version']
       assert_equal :string, lock_version_column.type
       assert lock_version_column.default.nil?
+      assert_nothing_raised { connection.change_column 'people', 'lock_version', :integer }
+      Person.reset_column_information
     end
 
     it 'not drop the default contraint if just renaming' do
@@ -54,6 +56,14 @@ class MigrationTestSQLServer < ActiveRecord::TestCase
       default_after = find_default.call
       assert default_after
       assert_equal default_before['constraint_keys'], default_after['constraint_keys']
+    end
+    
+    it 'change limit' do
+      assert_nothing_raised { connection.change_column :people, :lock_version, :integer, limit: 8 }
+    end
+    
+    it 'change null and default' do
+      assert_nothing_raised { connection.change_column :people, :first_name, :text, null: true, default: nil }
     end
 
   end

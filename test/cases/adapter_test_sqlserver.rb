@@ -231,6 +231,11 @@ class AdapterTestSQLServer < ActiveRecord::TestCase
       end
     end
 
+    it 'not disable referential integrity for the same table twice' do
+      tables = SSTestHasPk.connection.tables_with_referential_integrity
+      assert_equal tables.size, tables.uniq.size
+    end
+
   end
 
   describe 'database statements' do
@@ -268,9 +273,12 @@ class AdapterTestSQLServer < ActiveRecord::TestCase
       assert_equal 'integer', connection.type_to_sql(:integer, limit: 3)
     end
 
-    it 'create smallints when limit is less than 3' do
+    it 'create smallints when limit is 2' do
       assert_equal 'smallint', connection.type_to_sql(:integer, limit: 2)
-      assert_equal 'smallint', connection.type_to_sql(:integer, limit: 1)
+    end
+
+    it 'create tinyints when limit is 1' do
+      assert_equal 'tinyint', connection.type_to_sql(:integer, limit: 1)
     end
 
     it 'create bigints when limit is greateer than 4' do
