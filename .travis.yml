@@ -4,22 +4,25 @@ services:
   - docker
 env:
   global:
-    - COMPOSE_FILE: docker-compose.ci.yml
+    - TINYTDS_VERSION=2.1.0
+    - ACTIVERECORD_UNITTEST_HOST=localhost
+    - ACTIVERECORD_UNITTEST_DATASERVER=localhost
+rvm:
+  - 2.2.5
+  - 2.3.1
+  - 2.4.0
 before_install:
-  - sudo rm /usr/local/bin/docker-compose
-  - sudo curl -L "https://github.com/docker/compose/releases/download/1.22.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-  - sudo chmod +x /usr/local/bin/docker-compose
+  - export PATH=/opt/local/bin:$PATH
+  - docker info
+  - sudo ./test/bin/setup.sh
+  - sudo ./test/bin/install-openssl.sh
+  - openssl version
+  - sudo ./test/bin/install-freetds.sh
+  - tsql -C
 install:
-  - docker-compose build --build-arg TARGET_VERSION=$TARGET_VERSION
+  - export PATH=/opt/local/bin:$PATH
+  - gem install bundler
+  - bundle --version
+  - bundle install
 script:
-  - docker-compose run ci
-matrix:
-  include:
-    - name: 2.3.8
-      env: TARGET_VERSION=2.3.8
-    - name: 2.4.6
-      env: TARGET_VERSION=2.4.6
-    - name: 2.5.5
-      env: TARGET_VERSION=2.5.5
-    - name: 2.6.3
-      env: TARGET_VERSION=2.6.3
+  - bundle exec rake

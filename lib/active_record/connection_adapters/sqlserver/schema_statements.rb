@@ -32,33 +32,22 @@ module ActiveRecord
           end
         end
 
-        def indexes(table_name)
-          data = select("EXEC sp_helpindex #{quote(table_name)}", "SCHEMA") rescue []
-
+        def indexes(table_name, name = nil)
+          data = select("EXEC sp_helpindex #{quote(table_name)}", name) rescue []
           data.reduce([]) do |indexes, index|
             index = index.with_indifferent_access
-
             if index[:index_description] =~ /primary key/
               indexes
             else
               name    = index[:index_name]
               unique  = index[:index_description] =~ /unique/
               where   = select_value("SELECT [filter_definition] FROM sys.indexes WHERE name = #{quote(name)}")
-              orders  = {}
-              columns = []
-
-              index[:index_keys].split(',').each do |column|
+              columns = index[:index_keys].split(',').map do |column|
                 column.strip!
-
-                if column.ends_with?('(-)')
-                  column.gsub! '(-)', ''
-                  orders[column] = :desc
-                end
-
-                columns << column
+                column.gsub! '(-)', '' if column.ends_with?('(-)')
+                column
               end
-
-              indexes << IndexDefinition.new(table_name, name, unique, columns, where: where, orders: orders)
+              indexes << IndexDefinition.new(table_name, name, unique, columns, nil, nil, where)
             end
           end
         end
@@ -141,13 +130,7 @@ module ActiveRecord
           sql_commands = []
           indexes = []
           column_object = schema_cache.columns(table_name).find { |c| c.name.to_s == column_name.to_s }
-          without_constraints = options.key?(:default) || options.key?(:limit)
-          default = if !options.key?(:default) && column_object
-            column_object.default
-          else
-            options[:default]
-          end
-          if without_constraints || (column_object && column_object.type != type.to_sym)
+          if options_include_default?(options) || (column_object && column_object.type != type.to_sym)
             remove_default_constraint(table_name, column_name)
             indexes = indexes(table_name).select { |index| index.columns.include?(column_name.to_s) }
             remove_indexes(table_name, column_name)
@@ -155,9 +138,10 @@ module ActiveRecord
           sql_commands << "UPDATE #{quote_table_name(table_name)} SET #{quote_column_name(column_name)}=#{quote_default_expression(options[:default], column_object)} WHERE #{quote_column_name(column_name)} IS NULL" if !options[:null].nil? && options[:null] == false && !options[:default].nil?
           sql_commands << "ALTER TABLE #{quote_table_name(table_name)} ALTER COLUMN #{quote_column_name(column_name)} #{type_to_sql(type, limit: options[:limit], precision: options[:precision], scale: options[:scale])}"
           sql_commands.last << ' NOT NULL' if !options[:null].nil? && options[:null] == false
-          if without_constraints
-            default = quote_default_expression(default, column_object || column_for(table_name, column_name))
-            sql_commands << "ALTER TABLE #{quote_table_name(table_name)} ADD CONSTRAINT #{default_constraint_name(table_name, column_name)} DEFAULT #{default} FOR #{quote_column_name(column_name)}"
+          if options.key?(:default) && default_constraint_name(table_name, column_name).present?
+            change_column_default(table_name, column_name, options[:default])
+          elsif options_include_default?(options)
+            sql_commands << "ALTER TABLE #{quote_table_name(table_name)} ADD CONSTRAINT #{default_constraint_name(table_name, column_name)} DEFAULT #{quote_default_expression(options[:default], column_object)} FOR #{quote_column_name(column_name)}"
           end
           # Add any removed indexes back
           indexes.each do |index|
@@ -225,8 +209,7 @@ module ActiveRecord
           case type.to_s
           when 'integer'
             case limit
-            when 1          then  'tinyint'
-            when 2          then  'smallint'
+            when 1..2       then  'smallint'
             when 3..4, nil  then  'integer'
             when 5..8       then  'bigint'
             else raise(ActiveRecordError, "No integer type has byte size #{limit}. Use a numeric with precision 0 instead.")
@@ -252,8 +235,7 @@ module ActiveRecord
               s.gsub(/\s+(?:ASC|DESC)\b/i, '')
                .gsub(/\s+NULLS\s+(?:FIRST|LAST)\b/i, '')
             }.reject(&:blank?).map.with_index { |column, i| "#{column} AS alias_#{i}" }
-
-          (order_columns << super).join(", ")
+          [super, *order_columns].join(', ')
         end
 
         def update_table_definition(table_name, base)
@@ -263,7 +245,7 @@ module ActiveRecord
         def change_column_null(table_name, column_name, allow_null, default = nil)
           table_id = SQLServer::Utils.extract_identifiers(table_name)
           column_id = SQLServer::Utils.extract_identifiers(column_name)
-          column = column_for(table_name, column_name)
+          column = detect_column_for! table_name, column_name
           if !allow_null.nil? && allow_null == false && !default.nil?
             do_execute("UPDATE #{table_id} SET #{column_id}=#{quote(default)} WHERE #{column_id} IS NULL")
           end
@@ -272,17 +254,13 @@ module ActiveRecord
           do_execute sql
         end
 
-        def create_schema_dumper(options)
-          SQLServer::SchemaDumper.create(self, options)
-        end
-
         private
 
         def data_source_sql(name = nil, type: nil)
           scope = quoted_scope name, type: type
           table_name = lowercase_schema_reflection_sql 'TABLE_NAME'
           sql = "SELECT #{table_name}"
-          sql << ' FROM INFORMATION_SCHEMA.TABLES WITH (NOLOCK)'
+          sql << ' FROM INFORMATION_SCHEMA.TABLES'
           sql << ' WHERE TABLE_CATALOG = DB_NAME()'
           sql << " AND TABLE_SCHEMA = #{quote(scope[:schema])}"
           sql << " AND TABLE_NAME = #{quote(scope[:name])}" if scope[:name]
@@ -421,13 +399,11 @@ module ActiveRecord
             ci[:default_function] = begin
               default = ci[:default_value]
               if default.nil? && view_exists
-                default = select_value %{
+                default = select_value "
                   SELECT c.COLUMN_DEFAULT
                   FROM #{database}.INFORMATION_SCHEMA.COLUMNS c
-                  WHERE
-                    c.TABLE_NAME = '#{view_tblnm}'
-                    AND c.COLUMN_NAME = '#{views_real_column_name(table_name, ci[:name])}'
-                }.squish, 'SCHEMA'
+                  WHERE c.TABLE_NAME = '#{view_tblnm}'
+                  AND c.COLUMN_NAME = '#{views_real_column_name(table_name, ci[:name])}'".squish, 'SCHEMA'
               end
               case default
               when nil
@@ -446,7 +422,7 @@ module ActiveRecord
                        else ci[:type]
                        end
                 value = default.match(/\A\((.*)\)\Z/m)[1]
-                value = select_value("SELECT CAST(#{value} AS #{type}) AS value", 'SCHEMA')
+                value = select_value "SELECT CAST(#{value} AS #{type}) AS value", 'SCHEMA'
                 [value, nil]
               end
             end
@@ -497,6 +473,13 @@ module ActiveRecord
           "DF_#{table_name}_#{column_name}"
         end
 
+        def detect_column_for!(table_name, column_name)
+          unless column = schema_cache.columns(table_name).find { |c| c.name == column_name.to_s }
+            raise ActiveRecordError, "No such column: #{table_name}.#{column_name}"
+          end
+          column
+        end
+
         def lowercase_schema_reflection_sql(node)
           lowercase_schema_reflection ? "LOWER(#{node})" : node
         end
@@ -512,7 +495,7 @@ module ActiveRecord
           @view_information ||= {}
           @view_information[table_name] ||= begin
             identifier = SQLServer::Utils.extract_identifiers(table_name)
-            view_info = select_one "SELECT * FROM INFORMATION_SCHEMA.VIEWS WITH (NOLOCK) WHERE TABLE_NAME = #{quote(identifier.object)}", 'SCHEMA'
+            view_info = select_one "SELECT * FROM INFORMATION_SCHEMA.VIEWS WHERE TABLE_NAME = #{quote(identifier.object)}", 'SCHEMA'
             if view_info
               view_info = view_info.with_indifferent_access
               if view_info[:VIEW_DEFINITION].blank? || view_info[:VIEW_DEFINITION].length == 4000

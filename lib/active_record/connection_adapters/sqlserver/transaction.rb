@@ -26,13 +26,13 @@ module ActiveRecord
 
     end
 
-    Transaction.send :prepend, SQLServerTransaction
+    Transaction.send :include, SQLServerTransaction
 
     module SQLServerRealTransaction
 
       attr_reader :starting_isolation_level
 
-      def initialize(connection, options, *args)
+      def initialize(connection, options, run_commit_callbacks: false)
         @connection = connection
         @starting_isolation_level = current_isolation_level if options[:isolation]
         super
@@ -58,6 +58,7 @@ module ActiveRecord
 
     end
 
-    RealTransaction.send :prepend, SQLServerRealTransaction
+    RealTransaction.send :include, SQLServerRealTransaction
+
   end
 end
