@@ -1,3 +1,10 @@
+## v5.1.6.odbc
+
+#### Added
+
+* ODBC restoration.
+
+
 ## v5.1.6
 
 #### Added
