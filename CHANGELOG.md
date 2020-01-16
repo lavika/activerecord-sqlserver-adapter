@@ -1,3 +1,9 @@
+## v5.2.0.odbc
+
+#### Added
+
+- ODBC restoration.
+
 ## v5.2.0
 
 - #686 sql_for_insert set table name in case when pk is not nil
