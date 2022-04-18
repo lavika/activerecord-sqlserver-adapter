@@ -34,11 +34,7 @@ class ConnectionTestSQLServer < ActiveRecord::TestCase
     end
   end unless connection_sqlserver_azure?
 
-  describe "Connection management" do
-    it "set spid on connect" do
-      _(["Fixnum", "Integer"]).must_include connection.spid.class.name
-  describe 'ODBC connection management' do
-
+  describe "ODBC connection management" do
     it "return finished ODBC statement handle from #execute without block" do
       assert_all_odbc_statements_used_are_closed do
         connection.execute('SELECT * FROM [topics]')
@@ -88,14 +84,11 @@ class ConnectionTestSQLServer < ActiveRecord::TestCase
         connection.active?
       end
     end
-
   end if connection_odbc?
 
-
   describe "Connection management" do
-
     it "set spid on connect" do
-      ['Fixnum', 'Integer'].must_include connection.spid.class.name
+      ["Fixnum", "Integer"].must_include connection.spid.class.name
     end
 
     it "reset spid on disconnect!" do
