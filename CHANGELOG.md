@@ -1,3 +1,9 @@
+## v6.0.2.odbc
+
+#### Added
+
+- ODBC restoration.
+
 ## v6.0.2
 
 #### Fixed
