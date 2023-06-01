@@ -10,14 +10,15 @@ module ActiveRecord
 
         def fetch_type_metadata(sql_type, sqlserver_options = {})
           cast_type = lookup_cast_type(sql_type)
-          SQLServer::SqlTypeMetadata.new(
+          simple_type = SqlTypeMetadata.new(
             sql_type: sql_type,
             type: cast_type.type,
             limit: cast_type.limit,
             precision: cast_type.precision,
-            scale: cast_type.scale,
-            sqlserver_options: sqlserver_options
+            scale: cast_type.scale
           )
+
+          SQLServer::TypeMetadata.new(simple_type, **sqlserver_options)
         end
 
         def quote_string(s)
@@ -38,7 +39,7 @@ module ActiveRecord
 
         def quote_default_expression(value, column)
           cast_type = lookup_cast_type(column.sql_type)
-          if cast_type.type == :uuid && value =~ /\(\)/
+          if cast_type.type == :uuid && value.is_a?(String) && value.include?('()')
             value
           else
             super
@@ -108,9 +109,7 @@ module ActiveRecord
 
         private_constant :COLUMN_NAME, :COLUMN_NAME_WITH_ORDER
 
-        private
-
-        def _quote(value)
+        def quote(value)
           case value
           when Type::Binary::Data
             "0x#{value.hex}"
@@ -123,7 +122,7 @@ module ActiveRecord
           end
         end
 
-        def _type_cast(value)
+        def type_cast(value)
           case value
           when ActiveRecord::Type::SQLServer::Data
             value.to_s

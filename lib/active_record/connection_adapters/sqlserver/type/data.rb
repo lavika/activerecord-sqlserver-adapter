@@ -7,6 +7,8 @@ module ActiveRecord
         class Data
           attr_reader :value, :type
 
+          delegate :sub, to: :value
+
           def initialize(value, type)
             @value, @type = value, type
           end
@@ -25,7 +27,7 @@ module ActiveRecord
           end
 
           def eql?(other)
-            self.class == other.class && self.value == other.value
+            self.class == other.class && value == other.value
           end
           alias :== :eql?
         end

@@ -67,7 +67,7 @@ class SchemaDumperTestSQLServer < ActiveRecord::TestCase
     _(columns["float_col"].sql_type).must_equal        "float"
     _(columns["string_col"].sql_type).must_equal       "nvarchar(4000)"
     _(columns["text_col"].sql_type).must_equal         "nvarchar(max)"
-    _(columns["datetime_col"].sql_type).must_equal     "datetime"
+    _(columns["datetime_col"].sql_type).must_equal     "datetime2(6)"
     _(columns["timestamp_col"].sql_type).must_equal    "datetime"
     _(columns["time_col"].sql_type).must_equal         "time(7)"
     _(columns["date_col"].sql_type).must_equal         "date"
@@ -117,6 +117,15 @@ class SchemaDumperTestSQLServer < ActiveRecord::TestCase
     assert_line :uuid_col,          type: "uuid",           limit: nil,           precision: nil,   scale: nil,  default: nil
     assert_line :sstimestamp_col,   type: "ss_timestamp",   limit: nil,           precision: nil,   scale: nil,  default: nil
     assert_line :json_col,          type: "text",           limit: nil,           precision: nil,   scale: nil,  default: nil
+  end
+
+  it "dump column collation" do
+    generate_schema_for_table('sst_string_collation')
+
+    assert_line :string_without_collation, type: "string", limit: nil, default: nil, collation: nil
+    assert_line :string_default_collation, type: "varchar", limit: nil, default: nil, collation: nil
+    assert_line :string_with_collation, type: "varchar", limit: nil, default: nil, collation: "SQL_Latin1_General_CP1_CS_AS"
+    assert_line :varchar_with_collation, type: "varchar", limit: nil, default: nil, collation: "SQL_Latin1_General_CP1_CS_AS"
   end
 
   # Special Cases

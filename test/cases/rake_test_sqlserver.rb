@@ -10,8 +10,9 @@ class SQLServerRakeTest < ActiveRecord::TestCase
 
   let(:db_tasks)              { ActiveRecord::Tasks::DatabaseTasks }
   let(:new_database)          { "activerecord_unittest_tasks" }
-  let(:default_configuration) { ARTest.connection_config["arunit"] }
+  let(:default_configuration) { ARTest.test_configuration_hashes["arunit"] }
   let(:configuration)         { default_configuration.merge("database" => new_database) }
+  let(:db_config)             { ActiveRecord::Base.configurations.resolve(configuration) }
 
   before { skip "on azure" if azure_skip }
   before { disconnect! unless azure_skip }
@@ -151,7 +152,43 @@ class SQLServerRakeStructureDumpLoadTest < SQLServerRakeTest
     _(filedata).must_match %r{CREATE TABLE dbo\.users}
     db_tasks.purge(configuration)
     _(connection.tables).wont_include "users"
-    db_tasks.load_schema configuration, :sql, filename
+    db_tasks.load_schema db_config, :sql, filename
     _(connection.tables).must_include "users"
+  end
+end
+
+class SQLServerRakeSchemaCacheDumpLoadTest < SQLServerRakeTest
+  let(:filename) { File.join ARTest::SQLServer.test_root_sqlserver, "schema_cache.yml" }
+  let(:filedata) { File.read(filename) }
+
+  before do
+    quietly { db_tasks.create(configuration) }
+
+    connection.create_table :users, force: true do |t|
+      t.string :name, null: false
+    end
+  end
+
+  after do
+    FileUtils.rm_rf(filename)
+  end
+
+  it "dumps schema cache with SQL Server metadata" do
+    quietly { db_tasks.dump_schema_cache connection, filename }
+
+    filedata = File.read(filename)
+    schema_cache = YAML.respond_to?(:unsafe_load) ? YAML.unsafe_load(filedata) : YAML.load(filedata)
+
+    col_id, col_name = connection.schema_cache.columns("users")
+
+    assert col_id.is_identity
+    assert col_id.is_primary
+    assert_equal col_id.ordinal_position, 1
+    assert_equal col_id.table_name, "users"
+
+    assert_not col_name.is_identity
+    assert_not col_name.is_primary
+    assert_equal col_name.ordinal_position, 2
+    assert_equal col_name.table_name, "users"
   end
 end

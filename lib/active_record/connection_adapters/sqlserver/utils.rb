@@ -9,7 +9,7 @@ module ActiveRecord
         QUOTED_STRING_PREFIX = "N"
 
         # Value object to return identifiers from SQL Server names http://bit.ly/1CZ3EiL
-        # Inspiried from Rails PostgreSQL::Name adapter object in their own Utils.
+        # Inspired from Rails PostgreSQL::Name adapter object in their own Utils.
         #
         class Name
           SEPARATOR = "."
@@ -46,7 +46,22 @@ module ActiveRecord
           end
 
           def fully_qualified?
-            parts.compact.size == 4
+            qualified_level == :fully
+          end
+
+          def qualified_level
+            case parts.compact.size
+            when 4
+              :fully
+            when 3
+              :database
+            when 2
+              :schema
+            when 1
+              :table
+            else
+              :none
+            end
           end
 
           def to_s
@@ -92,7 +107,7 @@ module ActiveRecord
               @schema = @parts.first
             end
             rest = scanner.rest
-            rest = rest.starts_with?(".") ? rest[1..-1] : rest[0..-1]
+            rest = rest.start_with?(".") ? rest[1..-1] : rest[0..-1]
             @object = unquote(rest)
             @parts << @object
           end

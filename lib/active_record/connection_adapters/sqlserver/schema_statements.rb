@@ -27,7 +27,7 @@ module ActiveRecord
             end
           end
           if options[:if_exists] && @version_year < 2016
-            execute "IF EXISTS(SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = #{quote(table_name)}) DROP TABLE #{quote_table_name(table_name)}"
+            execute "IF EXISTS(SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = #{quote(table_name)}) DROP TABLE #{quote_table_name(table_name)}", "SCHEMA"
           else
             super
           end
@@ -51,7 +51,7 @@ module ActiveRecord
               index[:index_keys].split(",").each do |column|
                 column.strip!
 
-                if column.ends_with?("(-)")
+                if column.end_with?("(-)")
                   column.gsub! "(-)", ""
                   orders[column] = :desc
                 end
@@ -84,7 +84,7 @@ module ActiveRecord
         end
 
         def new_column(name, default, sql_type_metadata, null, default_function = nil, collation = nil, comment = nil, sqlserver_options = {})
-          SQLServerColumn.new(
+          SQLServer::Column.new(
             name,
             default,
             sql_type_metadata,
@@ -130,8 +130,9 @@ module ActiveRecord
           rename_table_indexes(table_name, new_name)
         end
 
-        def remove_column(table_name, column_name, type = nil, options = {})
+        def remove_column(table_name, column_name, type = nil, **options)
           raise ArgumentError.new("You must specify at least one column name.  Example: remove_column(:people, :first_name)") if column_name.is_a? Array
+          return if options[:if_exists] == true && !column_exists?(table_name, column_name)
 
           remove_check_constraints(table_name, column_name)
           remove_default_constraint(table_name, column_name)
@@ -156,6 +157,7 @@ module ActiveRecord
           end
           sql_commands << "UPDATE #{quote_table_name(table_name)} SET #{quote_column_name(column_name)}=#{quote_default_expression(options[:default], column_object)} WHERE #{quote_column_name(column_name)} IS NULL" if !options[:null].nil? && options[:null] == false && !options[:default].nil?
           alter_command = "ALTER TABLE #{quote_table_name(table_name)} ALTER COLUMN #{quote_column_name(column_name)} #{type_to_sql(type, limit: options[:limit], precision: options[:precision], scale: options[:scale])}"
+          alter_command += " COLLATE #{options[:collation]}" if options[:collation].present?
           alter_command += " NOT NULL" if !options[:null].nil? && options[:null] == false
           sql_commands << alter_command
           if without_constraints
@@ -190,7 +192,7 @@ module ActiveRecord
         end
 
         def rename_index(table_name, old_name, new_name)
-          raise ArgumentError, "Index name '#{new_name}' on table '#{table_name}' is too long; the limit is #{allowed_index_name_length} characters" if new_name.length > allowed_index_name_length
+          raise ArgumentError, "Index name '#{new_name}' on table '#{table_name}' is too long; the limit is #{index_name_length} characters" if new_name.length > index_name_length
 
           identifier = SQLServer::Utils.extract_identifiers("#{table_name}.#{old_name}")
           execute_procedure :sp_rename, identifier.quoted, new_name, "INDEX"
@@ -330,7 +332,7 @@ module ActiveRecord
         def initialize_native_database_types
           {
             primary_key: "bigint NOT NULL IDENTITY(1,1) PRIMARY KEY",
-            primary_key_nonclustered: "int NOT NULL IDENTITY(1,1) PRIMARY KEY NONCLUSTERED",
+            primary_key_nonclustered: "bigint NOT NULL IDENTITY(1,1) PRIMARY KEY NONCLUSTERED",
             integer: { name: "int", limit: 4 },
             bigint: { name: "bigint" },
             boolean: { name: "bit" },
@@ -376,7 +378,7 @@ module ActiveRecord
           binds << Relation::QueryAttribute.new("TABLE_NAME", identifier.object, nv128)
           binds << Relation::QueryAttribute.new("TABLE_SCHEMA", identifier.schema, nv128) unless identifier.schema.blank?
           results = sp_executesql(sql, "SCHEMA", binds)
-          results.map do |ci|
+          columns = results.map do |ci|
             ci = ci.symbolize_keys
             ci[:_type] = ci[:type]
             ci[:table_name] = view_tblnm || table_name
@@ -434,6 +436,13 @@ module ActiveRecord
             ci[:is_primary] = ci[:is_primary].to_i == 1
             ci[:is_identity] = ci[:is_identity].to_i == 1 unless [TrueClass, FalseClass].include?(ci[:is_identity].class)
             ci
+          end
+
+          # Since Rails 7, it's expected that all adapter raise error when table doesn't exists.
+          # I'm not aware of the possibility of tables without columns on SQL Server (postgres have those).
+          # Raise error if the method return an empty array
+          columns.tap do |result|
+            raise ActiveRecord::StatementInvalid, "Table '#{table_name}' doesn't exist" if result.empty?
           end
         end
 
@@ -505,6 +514,13 @@ module ActiveRecord
           }.gsub(/[ \t\r\n]+/, " ").strip
         end
 
+        def remove_columns_for_alter(table_name, *column_names, **options)
+          first, *rest = column_names
+
+          # return an array like this [DROP COLUMN col_1, col_2, col_3]. Abstract adapter joins fragments with ", "
+          [remove_column_for_alter(table_name, first)] + rest.map { |column_name| quote_column_name(column_name) }
+        end
+
         def remove_check_constraints(table_name, column_name)
           constraints = select_values "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE where TABLE_NAME = '#{quote_string(table_name)}' and COLUMN_NAME = '#{quote_string(column_name)}'", "SCHEMA"
           constraints.each do |constraint|
@@ -529,15 +545,20 @@ module ActiveRecord
 
         # === SQLServer Specific (Misc Helpers) ========================= #
 
+        # Parses just the table name from the SQL. Table name does not include database/schema/etc.
         def get_table_name(sql)
-          tn = if sql =~ /^\s*(INSERT|EXEC sp_executesql N'INSERT)(\s+INTO)?\s+([^\(\s]+)\s*|^\s*update\s+([^\(\s]+)\s*/i
-                 Regexp.last_match[3] || Regexp.last_match[4]
-               elsif sql =~ /FROM\s+([^\(\s]+)\s*/i
-                 Regexp.last_match[1]
-               else
-                 nil
-               end
+          tn = get_raw_table_name(sql)
           SQLServer::Utils.extract_identifiers(tn).object
+        end
+
+        # Parses the raw table name that is used in the SQL. Table name could include database/schema/etc.
+        def get_raw_table_name(sql)
+          case sql
+          when /^\s*(INSERT|EXEC sp_executesql N'INSERT)(\s+INTO)?\s+([^\(\s]+)\s*|^\s*update\s+([^\(\s]+)\s*/i
+            Regexp.last_match[3] || Regexp.last_match[4]
+          when /FROM\s+([^\(\s]+)\s*/i
+            Regexp.last_match[1]
+          end
         end
 
         def default_constraint_name(table_name, column_name)
@@ -559,7 +580,8 @@ module ActiveRecord
           @view_information ||= {}
           @view_information[table_name] ||= begin
             identifier = SQLServer::Utils.extract_identifiers(table_name)
-            view_info = select_one "SELECT * FROM INFORMATION_SCHEMA.VIEWS WITH (NOLOCK) WHERE TABLE_NAME = #{quote(identifier.object)}", "SCHEMA"
+            information_query_table = identifier.database.present? ? "[#{identifier.database}].[INFORMATION_SCHEMA].[VIEWS]" :  "[INFORMATION_SCHEMA].[VIEWS]"
+            view_info = select_one "SELECT * FROM #{information_query_table} WITH (NOLOCK) WHERE TABLE_NAME = #{quote(identifier.object)}", "SCHEMA"
             if view_info
               view_info = view_info.with_indifferent_access
               if view_info[:VIEW_DEFINITION].blank? || view_info[:VIEW_DEFINITION].length == 4000

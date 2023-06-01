@@ -3,8 +3,12 @@
 module ActiveRecord
   module ConnectionAdapters
     module SQLServer
-      class SchemaCreation < AbstractAdapter::SchemaCreation
+      class SchemaCreation < SchemaCreation
         private
+
+        def supports_index_using?
+          false
+        end
 
         def visit_TableDefinition(o)
           if_not_exists = o.if_not_exists
@@ -29,10 +33,29 @@ module ActiveRecord
           sql
         end
 
+        def visit_CreateIndexDefinition(o)
+          index = o.index
+
+          sql = []
+          sql << "IF NOT EXISTS (SELECT name FROM sysindexes WHERE name = '#{o.index.name}')" if o.if_not_exists
+          sql << "CREATE"
+          sql << "UNIQUE" if index.unique
+          sql << index.type.upcase if index.type
+          sql << "INDEX"
+          sql << "#{quote_column_name(index.name)} ON #{quote_table_name(index.table)}"
+          sql << "(#{quoted_columns(index)})"
+          sql << "WHERE #{index.where}" if index.where
+
+          sql.join(" ")
+        end
+
         def add_column_options!(sql, options)
           sql << " DEFAULT #{quote_default_expression(options[:default], options[:column])}" if options_include_default?(options)
           if options[:null] == false
             sql << " NOT NULL"
+          end
+          if options[:collation].present?
+            sql << " COLLATE #{options[:collation]}"
           end
           if options[:is_identity] == true
             sql << " IDENTITY(1,1)"

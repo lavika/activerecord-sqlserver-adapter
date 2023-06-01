@@ -95,6 +95,13 @@ ActiveRecord::Schema.define do
     t.column :string_with_multiline_default, :string, default: "Some long default with a\nnew line."
   end
 
+  create_table :sst_string_collation, collation: :SQL_Latin1_General_CP1_CI_AS, force: true do |t|
+    t.string :string_without_collation
+    t.varchar :string_default_collation, collation: :SQL_Latin1_General_CP1_CI_AS
+    t.varchar :string_with_collation, collation: :SQL_Latin1_General_CP1_CS_AS
+    t.varchar :varchar_with_collation, collation: :SQL_Latin1_General_CP1_CS_AS
+  end
+
   create_table :sst_edge_schemas, force: true do |t|
     t.string :description
     t.column "crazy]]quote", :string
@@ -287,4 +294,30 @@ ActiveRecord::Schema.define do
       CONSTRAINT PK_UNIQUE_KEY PRIMARY KEY (id)
     );
   SQLSERVERUNIQUEKEYS
+
+  execute "IF EXISTS(SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'sst_composite_without_identity') DROP TABLE sst_composite_without_identity"
+  execute <<-COMPOSITE_WITHOUT_IDENTITY
+    CREATE TABLE sst_composite_without_identity (
+      pk_col_one int NOT NULL,
+      pk_col_two int NOT NULL,
+      CONSTRAINT PK_sst_composite_without_identity PRIMARY KEY (pk_col_one, pk_col_two)
+    );
+  COMPOSITE_WITHOUT_IDENTITY
+
+  execute "IF EXISTS(SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'sst_composite_with_identity') DROP TABLE sst_composite_with_identity"
+  execute <<-COMPOSITE_WITH_IDENTITY
+    CREATE TABLE sst_composite_with_identity (
+      pk_col_one int IDENTITY NOT NULL,
+      pk_col_two int NOT NULL,
+      CONSTRAINT PK_sst_composite_with_identity PRIMARY KEY (pk_col_one, pk_col_two)
+    );
+  COMPOSITE_WITH_IDENTITY
+
+  execute "IF EXISTS(SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'aliens' and TABLE_SCHEMA = 'test') DROP TABLE test.aliens"
+  execute <<-TABLE_IN_OTHER_SCHEMA_USED_BY_MODEL
+    CREATE TABLE test.aliens(
+      id int IDENTITY NOT NULL primary key,
+      name varchar(255)
+    )
+  TABLE_IN_OTHER_SCHEMA_USED_BY_MODEL
 end

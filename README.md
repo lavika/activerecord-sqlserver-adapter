@@ -7,13 +7,25 @@
 
 ## About The Adapter
 
-The SQL Server adapter for ActiveRecord v6.0 using SQL Server 2012 or higher.
+The SQL Server adapter for ActiveRecord using SQL Server 2012 or higher.
 
-Interested in older versions? We follow a rational versioning policy that tracks Rails. That means that our 5.2.x version of the adapter is only for the latest 5.2 version of Rails. If you need the adapter for SQL Server 2008 or 2005, you are still in the right spot. Just install the latest 3.2.x to 4.1.x version of the adapter that matches your Rails version. We also have stable branches for each major/minor release of ActiveRecord.
+Interested in older versions? We follow a rational versioning policy that tracks Rails. That means that our 7.x version of the adapter is only for the latest 7.x version of Rails. If you need the adapter for SQL Server 2008 or 2005, you are still in the right spot. Just install the latest 3.2.x to 4.1.x version of the adapter that matches your Rails version. We also have stable branches for each major/minor release of ActiveRecord.
+
+| Adapter Version | Rails Version | Support                                                                                     |
+|-----------------| ------------- | ------------------------------------------------------------------------------------------- |
+| `7.0.1.0`       | `7.0.x`       | [active](https://github.com/rails-sqlserver/activerecord-sqlserver-adapter/tree/main)   |
+| `6.1.2.1`       | `6.1.x`       | [active](https://github.com/rails-sqlserver/activerecord-sqlserver-adapter/tree/6-1-stable) |
+| `6.0.2`         | `6.0.x`       | [active](https://github.com/rails-sqlserver/activerecord-sqlserver-adapter/tree/6-0-stable) |
+| `5.2.1`         | `5.2.x`       | [ended](https://github.com/rails-sqlserver/activerecord-sqlserver-adapter/tree/5-2-stable) |
+| `5.1.6`         | `5.1.x`       | [ended](https://github.com/rails-sqlserver/activerecord-sqlserver-adapter/tree/5-1-stable)  |
+| `4.2.18`        | `4.2.x`       | [ended](https://github.com/rails-sqlserver/activerecord-sqlserver-adapter/tree/4-2-stable)  |
+| `4.1.8`         | `4.1.x`       | [ended](https://github.com/rails-sqlserver/activerecord-sqlserver-adapter/tree/4-1-stable)  |
+
+For older versions, please check their stable branches.
 
 #### Native Data Type Support
 
-We support every data type supported by FreeTDS. All simplified Rails types in migrations will coorespond to a matching SQL Server national (unicode) data type. Always check the `initialize_native_database_types` [(here)](https://github.com/rails-sqlserver/activerecord-sqlserver-adapter/blob/master/lib/active_record/connection_adapters/sqlserver/schema_statements.rb) for an updated list.
+We support every data type supported by FreeTDS. All simplified Rails types in migrations will correspond to a matching SQL Server national (unicode) data type. Always check the `initialize_native_database_types` [(here)](https://github.com/rails-sqlserver/activerecord-sqlserver-adapter/blob/master/lib/active_record/connection_adapters/sqlserver/schema_statements.rb) for an updated list.
 
 The following types (`date`, `datetime2`, `datetimeoffset`, `time`) all require TDS version `7.3` with TinyTDS. We recommend using FreeTDS 1.0 or higher which default to using `TDSVER` to `7.3`. The adapter also sets TinyTDS's `tds_version` to this as well if non is specified.
 
@@ -55,7 +67,7 @@ ActiveRecord::Base.table_name_prefix = 'dbo.'
 It's also possible to create/change/drop a schema in the migration file as in the example below:
 
 ```ruby
-class CreateFooSchema < ActiveRecord::Migration[6.0]
+class CreateFooSchema < ActiveRecord::Migration[7.0]
   def up
     create_schema('foo')
 
@@ -71,26 +83,32 @@ end
 ```
 
 
-#### Configure Connection & App Name
+#### Configure Connection
 
-We currently conform to an unpublished and non-standard AbstractAdapter interface to configure connections made to the database. To do so, just override the `configure_connection` method in an initializer like so. In this case below we are setting the `TEXTSIZE` to 64 megabytes. Also, TinyTDS supports an application name when it logs into SQL Server. This can be used to identify the connection in SQL Server's activity monitor. By default it will use the `appname` from your database.yml file or a lowercased version of your Rails::Application name. It is now possible to define a `configure_application_name` method that can give you per instance details. Below shows how you might use this to get the process id and thread id of the current connection.
+We currently conform to an unpublished and non-standard AbstractAdapter interface to configure connections made to the database. To do so, just implement the `configure_connection` method in an initializer like so. In this case below we are setting the `TEXTSIZE` to 64 megabytes.
 
 ```ruby
 module ActiveRecord
   module ConnectionAdapters
     class SQLServerAdapter < AbstractAdapter
-
       def configure_connection
         raw_connection_do "SET TEXTSIZE #{64.megabytes}"
       end
-
-      def configure_application_name
-        "myapp_#{$$}_#{Thread.current.object_id}".to(29)
-      end
-
     end
   end
 end
+```
+
+#### Configure Application Name
+
+TinyTDS supports an application name when it logs into SQL Server. This can be used to identify the connection in SQL Server's activity monitor. By default it will use the `appname` from your database.yml file or your Rails::Application name.
+
+Below shows how you might use the database.yml file to use the process ID in your application name.
+
+```yaml
+development:
+  adapter: sqlserver
+  appname: <%= "myapp_#{Process.pid}" %>
 ```
 
 #### Executing Stored Procedures
@@ -98,7 +116,7 @@ end
 Every class that sub classes ActiveRecord::Base will now have an execute_procedure class method to use. This method takes the name of the stored procedure which can be a string or symbol and any number of variables to pass to the procedure. Arguments will automatically be quoted per the connection's standards as normal. For example:
 
 ```ruby
-Account.execute_procedure(:update_totals, 'admin', nil, true
+Account.execute_procedure(:update_totals, 'admin', nil, true)
 # Or with named parameters.
 Account.execute_procedure(:update_totals, named: 'params')
 ```
@@ -135,15 +153,24 @@ ActiveRecord::ConnectionAdapters::SQLServerAdapter.showplan_option = 'SHOWPLAN_X
 **NOTE:** The method we utilize to make SHOWPLANs work is very brittle to complex SQL. There is no getting around this as we have to deconstruct an already prepared statement for the sp_executesql method. If you find that explain breaks your app, simple disable it. Do not open a github issue unless you have a patch.  Please [consult the Rails guides](http://guides.rubyonrails.org/active_record_querying.html#running-explain) for more info.
 
 
+## New Rails Applications
+
+When creating a new Rails application you can specify that you want to use the SQL Server adapter using the `database` option:
+
+```
+rails new my_app --database=sqlserver
+```
+
+To then connect the application to your SQL Server instance edit the `config/database.yml` file with the username, password and host of your SQL Server instance.
+
+
 ## Installation
 
 The adapter has no strict gem dependencies outside of `ActiveRecord`. You will have to pick a connection mode, the default is dblib which uses the `TinyTDS` gem. Just bundle the gem and the adapter will use it.
 
 ```ruby
-gem 'tiny_tds'
 gem 'activerecord-sqlserver-adapter'
 ```
-
 
 ## Contributing
 
@@ -161,5 +188,4 @@ You can see an up-to-date list of contributors here: http://github.com/rails-sql
 
 ## License
 
-Copyright © 2008-2020. It is free software, and may be redistributed under the terms specified in the [MIT-LICENSE](MIT-LICENSE) file.
-
+Copyright © 2008-2022. It is free software, and may be redistributed under the terms specified in the [MIT-LICENSE](MIT-LICENSE) file.

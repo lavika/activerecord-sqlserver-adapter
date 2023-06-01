@@ -15,7 +15,7 @@ module ActiveRecord
         private
 
         def explicit_primary_key_default?(column)
-          column.is_primary? && !column.is_identity?
+          column.type == :integer && !column.is_identity?
         end
 
         def schema_limit(column)
@@ -27,11 +27,17 @@ module ActiveRecord
         def schema_collation(column)
           return unless column.collation
 
-          column.collation if column.collation != @connection.collation
+          # use inspect to ensure collation is dumped as string. Without this it's dumped as
+          # a constant ('collation: SQL_Latin1_General_CP1_CI_AS')
+          collation = column.collation.inspect
+          # use inspect to ensure string comparison
+          default_collation = @connection.collation.inspect
+
+          collation if collation != default_collation
         end
 
         def default_primary_key?(column)
-          super && column.is_primary? && column.is_identity?
+          super && column.is_identity?
         end
       end
     end

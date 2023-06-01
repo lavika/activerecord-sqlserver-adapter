@@ -10,6 +10,8 @@ module ActiveRecord
         module Calculations
           # Same as original except we don't perform PostgreSQL hack that removes ordering.
           def calculate(operation, column_name)
+            return super unless klass.connection.adapter_name == "SQLServer"
+
             if has_include?(column_name)
               relation = apply_join_dependency
 
@@ -29,16 +31,9 @@ module ActiveRecord
           private
 
           def build_count_subquery(relation, column_name, distinct)
-            super(relation.unscope(:order), column_name, distinct)
-          end
+            return super unless klass.connection.adapter_name == "SQLServer"
 
-          def type_cast_calculated_value(value, type, operation = nil)
-            case operation
-            when "count"   then value.to_i
-            when "sum"     then type.deserialize(value || 0)
-            when "average" then value&.respond_to?(:to_d) ? value.to_d : value
-            else type.deserialize(value)
-            end
+            super(relation.unscope(:order), column_name, distinct)
           end
         end
       end
@@ -48,5 +43,5 @@ end
 
 ActiveSupport.on_load(:active_record) do
   mod = ActiveRecord::ConnectionAdapters::SQLServer::CoreExt::Calculations
-  ActiveRecord::Relation.prepend(mod)
+  ActiveRecord::Relation.include(mod)
 end
