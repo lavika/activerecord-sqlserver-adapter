@@ -483,7 +483,7 @@ module ActiveRecord
         end
 
         def handle_to_names_and_values_odbc(handle, options = {})
-          @connection.use_utc = ActiveRecord::Base.default_timezone == :utc
+          @connection.use_utc = ActiveRecord.default_timezone == :utc
           if options[:ar_result]
             columns = lowercase_schema_reflection ? handle.columns(true).map { |c| c.name.downcase } : handle.columns(true).map { |c| c.name }
             rows = handle.fetch_all || []
