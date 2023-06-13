@@ -136,7 +136,7 @@ module ActiveRecord
           end.tap do |c|
             begin
               c.use_time = true
-              c.use_utc = ActiveRecord::Base.default_timezone == :utc
+              c.use_utc = ActiveRecord.default_timezone == :utc
             rescue Exception
               warn 'Ruby ODBC v0.99992 or higher is required.'
             end
