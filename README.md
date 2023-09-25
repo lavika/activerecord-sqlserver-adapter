@@ -1,29 +1,40 @@
 # ActiveRecord SQL Server Adapter. For SQL Server 2012 And Higher.
 
-* [![TravisCI](https://travis-ci.org/rails-sqlserver/activerecord-sqlserver-adapter.svg?branch=master)](https://travis-ci.org/rails-sqlserver/activerecord-sqlserver-adapter) - TravisCI
+* [![CI](https://github.com/rails-sqlserver/activerecord-sqlserver-adapter/actions/workflows/ci.yml/badge.svg)](https://github.com/rails-sqlserver/activerecord-sqlserver-adapter/actions/workflows/ci.yml) - CI
 * [![Build Status](https://ci.appveyor.com/api/projects/status/mtgbx8f57vr7k2qa/branch/master?svg=true)](https://ci.appveyor.com/project/rails-sqlserver/activerecord-sqlserver-adapter/branch/master) - Appveyor
 * [![Gem Version](http://img.shields.io/gem/v/activerecord-sqlserver-adapter.svg)](https://rubygems.org/gems/activerecord-sqlserver-adapter) - Gem Version
-* [![Dependency Status](https://dependencyci.com/github/rails-sqlserver/activerecord-sqlserver-adapter/badge)](https://dependencyci.com/github/rails-sqlserver/activerecord-sqlserver-adapter) - Dependency Status
 * [![Gitter chat](https://img.shields.io/badge/%E2%8A%AA%20GITTER%20-JOIN%20CHAT%20%E2%86%92-brightgreen.svg?style=flat)](https://gitter.im/rails-sqlserver/activerecord-sqlserver-adapter) - Community
-
-## Supporting TinyTDS/Adapter
-
-Both TinyTDS and the Rails SQL Server Adapter are MIT-licensed open source projects. Its ongoing development is made possible thanks to the support by these awesome [backers](https://github.com/rails-sqlserver/tiny_tds/blob/master/BACKERS.md). If you'd like to join them, check out our [Patreon Campaign](https://www.patreon.com/metaskills).
-
 
 ## About The Adapter
 
-The SQL Server adapter for ActiveRecord v5.2 using SQL Server 2012 or higher.
+The SQL Server adapter for ActiveRecord using SQL Server 2012 or higher.
 
-Interested in older versions? We follow a rational versioning policy that tracks Rails. That means that our 5.1.x version of the adapter is only for the latest 5.1 version of Rails. If you need the adapter for SQL Server 2008 or 2005, you are still in the right spot. Just install the latest 3.2.x to 4.1.x version of the adapter that matches your Rails version. We also have stable branches for each major/minor release of ActiveRecord.
+Interested in older versions? We follow a rational versioning policy that tracks Rails. That means that our 7.x version of the adapter is only for the latest 7.x version of Rails. If you need the adapter for SQL Server 2008 or 2005, you are still in the right spot. Just install the latest 3.2.x to 4.1.x version of the adapter that matches your Rails version. We also have stable branches for each major/minor release of ActiveRecord.
+
+| Adapter Version | Rails Version        | Support        | Branch                                                                                          |
+|-----------------|----------------------|----------------|-------------------------------------------------------------------------------------------------|
+| n/a             | `7.1.0` (unreleased) | In development | [main](https://github.com/rails-sqlserver/activerecord-sqlserver-adapter/tree/main)             |
+| `7.0.3.0`       | `7.0.x`              | Active         | [7-0-stable](https://github.com/rails-sqlserver/activerecord-sqlserver-adapter/tree/7-0-stable) |
+| `6.1.2.1`       | `6.1.x`              | Active         | [6-1-stable](https://github.com/rails-sqlserver/activerecord-sqlserver-adapter/tree/6-1-stable) |
+| `6.0.3`         | `6.0.x`              | Active         | [6-0-stable](https://github.com/rails-sqlserver/activerecord-sqlserver-adapter/tree/6-0-stable) |
+| `5.2.1`         | `5.2.x`              | Ended          | [5-2-stable](https://github.com/rails-sqlserver/activerecord-sqlserver-adapter/tree/5-2-stable) |
+| `5.1.6`         | `5.1.x`              | Ended          | [5-1-stable](https://github.com/rails-sqlserver/activerecord-sqlserver-adapter/tree/5-1-stable) |
+| `4.2.18`        | `4.2.x`              | Ended          | [4-2-stable](https://github.com/rails-sqlserver/activerecord-sqlserver-adapter/tree/4-2-stable) |
+| `4.1.8`         | `4.1.x`              | Ended          | [4-1-stable](https://github.com/rails-sqlserver/activerecord-sqlserver-adapter/tree/4-1-stable) |
+
+For older versions, please check their stable branches.
 
 #### Native Data Type Support
 
-We support every data type supported by FreeTDS. All simplified Rails types in migrations will coorespond to a matching SQL Server national (unicode) data type. Always check the `initialize_native_database_types` [(here)](https://github.com/rails-sqlserver/activerecord-sqlserver-adapter/blob/master/lib/active_record/connection_adapters/sqlserver/schema_statements.rb) for an updated list.
+We support every data type supported by FreeTDS. All simplified Rails types in migrations will correspond to a matching SQL Server national (unicode) data type. Always check the `initialize_native_database_types` [(here)](https://github.com/rails-sqlserver/activerecord-sqlserver-adapter/blob/master/lib/active_record/connection_adapters/sqlserver/schema_statements.rb) for an updated list.
 
-The following types (date, datetime2, datetimeoffset, time) all require TDS version 7.3 with TinyTDS. We recommend using FreeTDS 1.0 or higher which default to using `TDSVER` to "7.3". The adapter also sets TinyTDS's `tds_version` to this as well if non is specified.
+The following types (`date`, `datetime2`, `datetimeoffset`, `time`) all require TDS version `7.3` with TinyTDS. We recommend using FreeTDS 1.0 or higher which default to using `TDSVER` to `7.3`. The adapter also sets TinyTDS's `tds_version` to this as well if non is specified.
 
-The Rails v5 adapter supports ActiveRecord's `datetime_with_precision` setting. This means that passing `:precision` to a datetime column is supported. Using a pecision with the `:datetime` type will signal the adapter to use the `datetime2` type under the hood.
+The adapter supports ActiveRecord's `datetime_with_precision` setting. This means that passing `:precision` to a datetime column is supported.
+
+By default, precision 6 is used for `:datetime` types if precision is not specified. Any non-nil precision will tell
+the adapter to use the `datetime2` column type. To create a `datetime` column using a migration a precision of `nil`
+should be specified, otherwise the precision will default to 6 and a `datetime2` column will be created.
 
 
 #### Identity Inserts with Triggers
@@ -58,27 +69,54 @@ Depending on your user and schema setup, it may be needed to use a table name pr
 ActiveRecord::Base.table_name_prefix = 'dbo.'
 ```
 
+It's also possible to create/change/drop a schema in the migration file as in the example below:
 
-#### Configure Connection & App Name
+```ruby
+class CreateFooSchema < ActiveRecord::Migration[7.0]
+  def up
+    create_schema('foo')
 
-We currently conform to an unpublished and non-standard AbstractAdapter interface to configure connections made to the database. To do so, just override the `configure_connection` method in an initializer like so. In this case below we are setting the `TEXTSIZE` to 64 megabytes. Also, TinyTDS supports an application name when it logs into SQL Server. This can be used to identify the connection in SQL Server's activity monitor. By default it will use the `appname` from your database.yml file or a lowercased version of your Rails::Application name. It is now possible to define a `configure_application_name` method that can give you per instance details. Below shows how you might use this to get the process id and thread id of the current connection.
+    # Or you could move a table to a different schema
+
+    change_table_schema('foo', 'dbo.admin')
+  end
+
+  def down
+    drop_schema('foo')
+  end
+end
+```
+
+
+#### Configure Connection
+
+The adapter conforms to the AbstractAdapter interface to configure connections. If you require additional connection
+configuration then implement the `configure_connection` method in an initializer like so. In the following
+example we are setting the `TEXTSIZE` to 64 megabytes.
 
 ```ruby
 module ActiveRecord
   module ConnectionAdapters
     class SQLServerAdapter < AbstractAdapter
-
       def configure_connection
+        super
         raw_connection_do "SET TEXTSIZE #{64.megabytes}"
       end
-
-      def configure_application_name
-        "myapp_#{$$}_#{Thread.current.object_id}".to(29)
-      end
-
     end
   end
 end
+```
+
+#### Configure Application Name
+
+TinyTDS supports an application name when it logs into SQL Server. This can be used to identify the connection in SQL Server's activity monitor. By default it will use the `appname` from your database.yml file or your Rails::Application name.
+
+Below shows how you might use the database.yml file to use the process ID in your application name.
+
+```yaml
+development:
+  adapter: sqlserver
+  appname: <%= "myapp_#{Process.pid}" %>
 ```
 
 #### Executing Stored Procedures
@@ -86,9 +124,9 @@ end
 Every class that sub classes ActiveRecord::Base will now have an execute_procedure class method to use. This method takes the name of the stored procedure which can be a string or symbol and any number of variables to pass to the procedure. Arguments will automatically be quoted per the connection's standards as normal. For example:
 
 ```ruby
-Account.execute_procedure :update_totals, 'admin', nil, true
+Account.execute_procedure(:update_totals, 'admin', nil, true)
 # Or with named parameters.
-Account.execute_procedure :update_totals, named: 'params'
+Account.execute_procedure(:update_totals, named: 'params')
 ```
 
 #### Explain Support (SHOWPLAN)
@@ -123,15 +161,25 @@ ActiveRecord::ConnectionAdapters::SQLServerAdapter.showplan_option = 'SHOWPLAN_X
 **NOTE:** The method we utilize to make SHOWPLANs work is very brittle to complex SQL. There is no getting around this as we have to deconstruct an already prepared statement for the sp_executesql method. If you find that explain breaks your app, simple disable it. Do not open a github issue unless you have a patch.  Please [consult the Rails guides](http://guides.rubyonrails.org/active_record_querying.html#running-explain) for more info.
 
 
-## Installation
+## New Rails Applications
 
-The adapter has no strict gem dependencies outside of ActiveRecord. You will have to pick a connection mode, the default is dblib which uses the TinyTDS gem. Just bundle the gem and the adapter will use it.
+When creating a new Rails application you can specify that you want to use the SQL Server adapter using the `database` option:
 
-```ruby
-gem 'tiny_tds'
-gem 'activerecord-sqlserver-adapter'
+```
+rails new my_app --database=sqlserver
 ```
 
+To then connect the application to your SQL Server instance edit the `config/database.yml` file with the username, password and host of your SQL Server instance.
+
+
+## Installation
+
+The adapter has no strict gem dependencies outside of `ActiveRecord` and
+[TinyTDS](https://github.com/rails-sqlserver/tiny_tds).
+
+```ruby
+gem 'activerecord-sqlserver-adapter'
+```
 
 ## Contributing
 
@@ -145,30 +193,9 @@ If you would like to contribute a feature or bugfix, thanks! To make sure your f
 
 Many many people have contributed. If you do not see your name here and it should be let us know. Also, many thanks go out to those that have pledged financial contributions.
 
-
-## Contributors
-
-Up-to-date list of contributors: http://github.com/rails-sqlserver/activerecord-sqlserver-adapter/contributors
-
-* metaskills (Ken Collins)
-* Annaswims (Annaswims)
-* wbond (Will Bond)
-* Thirdshift (Garrett Hart)
-* h-lame (Murray Steele)
-* vegantech
-* cjheath (Clifford Heath)
-* fryguy (Jason Frey)
-* jrafanie (Joe Rafaniello)
-* nerdrew (Andrew Ryan)
-* snowblink (Jonathan Lim)
-* koppen (Jakob Skjerning)
-* ebryn (Erik Bryn)
-* adzap (Adam Meehan)
-* neomindryan (Ryan Findley)
-* jeremydurham (Jeremy Durham)
+You can see an up-to-date list of contributors here: http://github.com/rails-sqlserver/activerecord-sqlserver-adapter/contributors
 
 
 ## License
 
-Copyright © 2008-2017. It is free software, and may be redistributed under the terms specified in the MIT-LICENSE file.
-
+ActiveRecord SQL Server Adapter is released under the [MIT License](https://opensource.org/licenses/MIT).

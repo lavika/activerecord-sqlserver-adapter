@@ -1,17 +1,17 @@
-require 'strscan'
+# frozen_string_literal: true
+
+require "strscan"
 
 module ActiveRecord
   module ConnectionAdapters
     module SQLServer
       module Utils
-
-        QUOTED_STRING_PREFIX = 'N'
+        QUOTED_STRING_PREFIX = "N"
 
         # Value object to return identifiers from SQL Server names http://bit.ly/1CZ3EiL
-        # Inspiried from Rails PostgreSQL::Name adapter object in their own Utils.
+        # Inspired from Rails PostgreSQL::Name adapter object in their own Utils.
         #
         class Name
-
           SEPARATOR = "."
           UNQUOTED_SCANNER = /\]?\./
           QUOTED_SCANNER   = /\A\[.*?\]\./
@@ -46,7 +46,22 @@ module ActiveRecord
           end
 
           def fully_qualified?
-            parts.compact.size == 4
+            qualified_level == :fully
+          end
+
+          def qualified_level
+            case parts.compact.size
+            when 4
+              :fully
+            when 3
+              :database
+            when 2
+              :schema
+            when 1
+              :table
+            else
+              :none
+            end
           end
 
           def to_s
@@ -54,15 +69,15 @@ module ActiveRecord
           end
 
           def quoted
-            parts.map{ |p| quote(p) if p }.join SEPARATOR
+            parts.map { |p| quote(p) if p }.join SEPARATOR
           end
 
           def quoted_raw
             quote @raw_name
           end
 
-          def ==(o)
-            o.class == self.class && o.parts == parts
+          def ==(other)
+            other.class == self.class && other.parts == parts
           end
           alias_method :eql?, :==
 
@@ -75,6 +90,7 @@ module ActiveRecord
           def parse_raw_name
             @parts = []
             return if raw_name.blank?
+
             scanner = StringScanner.new(raw_name)
             matched = scanner.exist?(QUOTED_CHECKER) ? scanner.scan_until(QUOTED_SCANNER) : scanner.scan_until(UNQUOTED_SCANNER)
             while matched
@@ -91,7 +107,7 @@ module ActiveRecord
               @schema = @parts.first
             end
             rest = scanner.rest
-            rest = rest.starts_with?('.') ? rest[1..-1] : rest[0..-1]
+            rest = rest.start_with?(".") ? rest[1..-1] : rest[0..-1]
             @object = unquote(rest)
             @parts << @object
           end
@@ -101,7 +117,7 @@ module ActiveRecord
           end
 
           def unquote(part)
-            if part && part.start_with?('[')
+            if part && part.start_with?("[")
               part[1..-2]
             else
               part
@@ -111,7 +127,6 @@ module ActiveRecord
           def parts
             @parts
           end
-
         end
 
         extend self
@@ -139,7 +154,6 @@ module ActiveRecord
         def extract_identifiers(name)
           SQLServer::Utils::Name.new(name)
         end
-
       end
     end
   end

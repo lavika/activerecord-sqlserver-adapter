@@ -1,5 +1,6 @@
-ActiveRecord::Schema.define do
+# frozen_string_literal: true
 
+ActiveRecord::Schema.define do
   # Exhaustive Data Types
 
   execute File.read(ARTest::SQLServer.schema_datatypes_2012_file)
@@ -13,8 +14,9 @@ ActiveRecord::Schema.define do
     t.float     :float_col
     t.string    :string_col
     t.text      :text_col
-    t.datetime  :datetime_col
-    t.timestamp :timestamp_col
+    t.datetime  :datetime_nil_precision_col, precision: nil
+    t.datetime  :datetime_col  # Precision defaults to 6
+    t.timestamp :timestamp_col # Precision defaults to 6
     t.time      :time_col
     t.date      :date_col
     t.binary    :binary_col
@@ -43,28 +45,28 @@ ActiveRecord::Schema.define do
 
   # Edge Cases
 
-  if ENV['IN_MEMORY_OLTP'] && supports_in_memory_oltp?
-    create_table 'sst_memory', force: true, id: false,
-                 options: 'WITH (MEMORY_OPTIMIZED = ON, DURABILITY = SCHEMA_AND_DATA)' do |t|
+  if ENV["IN_MEMORY_OLTP"] && supports_in_memory_oltp?
+    create_table "sst_memory", force: true, id: false,
+                               options: "WITH (MEMORY_OPTIMIZED = ON, DURABILITY = SCHEMA_AND_DATA)" do |t|
       t.primary_key_nonclustered :id
       t.string :name
       t.timestamps
     end
   end
 
-  create_table 'sst_bookings', force: true do |t|
+  create_table "sst_bookings", force: true do |t|
     t.string :name
     t.datetime2 :created_at, null: false
     t.datetime2 :updated_at, null: false
   end
 
-  create_table 'sst_uuids', force: true, id: :uuid do |t|
+  create_table "sst_uuids", force: true, id: :uuid do |t|
     t.string :name
-    t.uuid   :other_uuid, default: 'NEWID()'
+    t.uuid   :other_uuid, default: "NEWID()"
     t.uuid   :uuid_nil_default, default: nil
   end
 
-  create_table 'sst_my$strange_table', force: true do |t|
+  create_table "sst_my$strange_table", force: true do |t|
     t.string :name
   end
 
@@ -77,27 +79,34 @@ ActiveRecord::Schema.define do
     t.string :name
   end
 
-  create_table 'sst_quoted-table', force: true do |t|
+  create_table "sst_quoted-table", force: true do |t|
   end
   execute "IF EXISTS (SELECT TABLE_NAME FROM INFORMATION_SCHEMA.VIEWS WHERE TABLE_NAME = 'sst_quoted-view1') DROP VIEW [sst_quoted-view1]"
   execute "CREATE VIEW [sst_quoted-view1] AS SELECT * FROM [sst_quoted-table]"
   execute "IF EXISTS (SELECT TABLE_NAME FROM INFORMATION_SCHEMA.VIEWS WHERE TABLE_NAME = 'sst_quoted-view2') DROP VIEW [sst_quoted-view2]"
-  execute "CREATE VIEW [sst_quoted-view2] AS \n /*#{'x'*4000}}*/ \n SELECT * FROM [sst_quoted-table]"
+  execute "CREATE VIEW [sst_quoted-view2] AS \n /*#{'x' * 4000}}*/ \n SELECT * FROM [sst_quoted-table]"
 
   create_table :sst_string_defaults, force: true do |t|
     t.column :string_with_null_default, :string, default: nil
-    t.column :string_with_pretend_null_one, :string, default: 'null'
-    t.column :string_with_pretend_null_two, :string, default: '(null)'
-    t.column :string_with_pretend_null_three, :string, default: 'NULL'
-    t.column :string_with_pretend_null_four, :string, default: '(NULL)'
-    t.column :string_with_pretend_paren_three, :string, default: '(3)'
+    t.column :string_with_pretend_null_one, :string, default: "null"
+    t.column :string_with_pretend_null_two, :string, default: "(null)"
+    t.column :string_with_pretend_null_three, :string, default: "NULL"
+    t.column :string_with_pretend_null_four, :string, default: "(NULL)"
+    t.column :string_with_pretend_paren_three, :string, default: "(3)"
     t.column :string_with_multiline_default, :string, default: "Some long default with a\nnew line."
+  end
+
+  create_table :sst_string_collation, collation: :SQL_Latin1_General_CP1_CI_AS, force: true do |t|
+    t.string :string_without_collation
+    t.varchar :string_default_collation, collation: :SQL_Latin1_General_CP1_CI_AS
+    t.varchar :string_with_collation, collation: :SQL_Latin1_General_CP1_CS_AS
+    t.varchar :varchar_with_collation, collation: :SQL_Latin1_General_CP1_CS_AS
   end
 
   create_table :sst_edge_schemas, force: true do |t|
     t.string :description
-    t.column 'crazy]]quote', :string
-    t.column 'with spaces', :string
+    t.column "crazy]]quote", :string
+    t.column "with spaces", :string
   end
 
   execute "IF EXISTS(SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'sst_natural_pk_data') DROP TABLE sst_natural_pk_data"
@@ -130,7 +139,7 @@ ActiveRecord::Schema.define do
 
   execute "DROP DEFAULT [sst_getdateobject];" rescue nil
   execute "CREATE DEFAULT [sst_getdateobject] AS getdate();" rescue nil
-  create_table 'sst_defaultobjects', force: true do |t|
+  create_table "sst_defaultobjects", force: true do |t|
     t.string :name
     t.date   :date
   end
@@ -149,7 +158,7 @@ ActiveRecord::Schema.define do
     t.column(:fk_id2, :bigint)
   end
 
-  create_table(:sst_has_pks, force: true) { }
+  create_table(:sst_has_pks, force: true) {}
   execute <<-ADDFKSQL
     ALTER TABLE sst_has_fks
     ADD CONSTRAINT FK__sst_has_fks_id
@@ -181,7 +190,7 @@ ActiveRecord::Schema.define do
   execute <<-STRINGDEFAULTSBIGVIEW
     CREATE VIEW sst_string_defaults_big_view AS
       SELECT id, string_with_pretend_null_one as pretend_null
-      /*#{'x'*4000}}*/
+      /*#{'x' * 4000}}*/
       FROM sst_string_defaults
   STRINGDEFAULTSBIGVIEW
 
@@ -226,7 +235,7 @@ ActiveRecord::Schema.define do
   # Another schema.
 
   create_table :sst_schema_columns, force: true do |t|
-    t.column :field1 , :integer
+    t.column :field1, :integer
   end
 
   execute "IF NOT EXISTS(SELECT * FROM sys.schemas WHERE name = 'test') EXEC sp_executesql N'CREATE SCHEMA test'"
@@ -277,4 +286,39 @@ ActiveRecord::Schema.define do
     )
   SCHEMATESTMULTIPLESCHEMA
 
+  execute "IF EXISTS(SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'unique_key_dumped_table') DROP TABLE unique_key_dumped_table"
+  execute <<-SQLSERVERUNIQUEKEYS
+    CREATE TABLE unique_key_dumped_table (
+      id int IDENTITY(1,1) NOT NULL,
+      unique_field int DEFAULT 0 NOT NULL,
+      CONSTRAINT IX_UNIQUE_KEY UNIQUE (unique_field),
+      CONSTRAINT PK_UNIQUE_KEY PRIMARY KEY (id)
+    );
+  SQLSERVERUNIQUEKEYS
+
+  execute "IF EXISTS(SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'sst_composite_without_identity') DROP TABLE sst_composite_without_identity"
+  execute <<-COMPOSITE_WITHOUT_IDENTITY
+    CREATE TABLE sst_composite_without_identity (
+      pk_col_one int NOT NULL,
+      pk_col_two int NOT NULL,
+      CONSTRAINT PK_sst_composite_without_identity PRIMARY KEY (pk_col_one, pk_col_two)
+    );
+  COMPOSITE_WITHOUT_IDENTITY
+
+  execute "IF EXISTS(SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'sst_composite_with_identity') DROP TABLE sst_composite_with_identity"
+  execute <<-COMPOSITE_WITH_IDENTITY
+    CREATE TABLE sst_composite_with_identity (
+      pk_col_one int IDENTITY NOT NULL,
+      pk_col_two int NOT NULL,
+      CONSTRAINT PK_sst_composite_with_identity PRIMARY KEY (pk_col_one, pk_col_two)
+    );
+  COMPOSITE_WITH_IDENTITY
+
+  execute "IF EXISTS(SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'aliens' and TABLE_SCHEMA = 'test') DROP TABLE test.aliens"
+  execute <<-TABLE_IN_OTHER_SCHEMA_USED_BY_MODEL
+    CREATE TABLE test.aliens(
+      id int IDENTITY NOT NULL primary key,
+      name varchar(255)
+    )
+  TABLE_IN_OTHER_SCHEMA_USED_BY_MODEL
 end
