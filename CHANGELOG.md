@@ -1,3 +1,9 @@
+## v7.0.4.0.odbc
+
+#### Added
+
+- ODBC restoration.
+
 ## v7.0.4.0
 
 #### Changed
