@@ -78,7 +78,7 @@ module ActiveRecord
         end
 
         def new_client(config)
-          case config[:mode]
+          case config[:mode].to_sym
           when :dblib
             require "tiny_tds"
             dblib_connect(config)
@@ -124,6 +124,25 @@ module ActiveRecord
           raise e
         end
 
+        def odbc_connect(config)
+          if config[:dsn].include?(';')
+            driver = ODBC::Driver.new.tap do |d|
+              d.name = config[:dsn_name] || 'Driver1'
+              d.attrs = config[:dsn].split(';').map { |atr| atr.split('=') }.reject { |kv| kv.size != 2 }.reduce({}) { |a, e| k, v = e ; a[k] = v ; a }
+            end
+            ODBC::Database.new.drvconnect(driver)
+          else
+            ODBC.connect config[:dsn], config[:username], config[:password]
+          end.tap do |c|
+            begin
+              c.use_time = true
+              c.use_utc = ActiveRecord::Base.default_timezone == :utc
+            rescue Exception
+              warn 'Ruby ODBC v0.99992 or higher is required.'
+            end
+          end
+        end
+
         def config_appname(config)
           if instance_methods.include?(:configure_application_name)
             ActiveSupport::Deprecation.warn <<~MSG.squish
@@ -158,6 +177,7 @@ module ActiveRecord
       end
 
       def initialize(connection, logger, _connection_options, config)
+        config[:mode] = config[:mode].to_s.downcase.underscore.to_sym
         super(connection, logger, config)
         @connection_options = config
         perform_connection_configuration
@@ -534,25 +554,6 @@ module ActiveRecord
         @connection_errors ||= [].tap do |errors|
           errors << TinyTds::Error if defined?(TinyTds::Error)
           errors << ODBC::Error if defined?(ODBC::Error)
-        end
-      end
-
-      def odbc_connect(config)
-        if config[:dsn].include?(';')
-          driver = ODBC::Driver.new.tap do |d|
-            d.name = config[:dsn_name] || 'Driver1'
-            d.attrs = config[:dsn].split(';').map { |atr| atr.split('=') }.reject { |kv| kv.size != 2 }.reduce({}) { |a, e| k, v = e ; a[k] = v ; a }
-          end
-          ODBC::Database.new.drvconnect(driver)
-        else
-          ODBC.connect config[:dsn], config[:username], config[:password]
-        end.tap do |c|
-          begin
-            c.use_time = true
-            c.use_utc = ActiveRecord::Base.default_timezone == :utc
-          rescue Exception
-            warn 'Ruby ODBC v0.99992 or higher is required.'
-          end
         end
       end
 
